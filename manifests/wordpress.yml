@@ -1,4 +1,14 @@
 ---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  labels:
+    app.kubernetes.io/instance: wordpress
+    app.kubernetes.io/name: wordpress
+  name: wordpress
+  namespace: default
+...
+---
 apiVersion: apps/v1
 kind: Deployment
 metadata:
@@ -24,6 +34,30 @@ spec:
       labels:
         app.kubernetes.io/instance: wordpress
         app.kubernetes.io/name: wordpress
+      annotations:
+        vault.hashicorp.com/agent-inject: 'true'
+        vault.hashicorp.com/agent-inject-status: update
+        vault.hashicorp.com/agent-inject-secret-db-username: >-
+          database/static-creds/wordpress
+        vault.hashicorp.com/agent-inject-template-db-username: |
+          {% raw %}
+          {{- with secret "database/static-creds/wordpress" -}}
+          {{- .Data.username -}}
+          {{- end -}}
+          {% endraw %}
+        vault.hashicorp.com/agent-inject-secret-db-password: >-
+          database/static-creds/wordpress
+        vault.hashicorp.com/agent-inject-template-db-password: |
+          {% raw %}
+          {{- with secret "database/static-creds/wordpress" -}}
+          {{- .Data.password -}}
+          {{- end -}}
+          {% endraw %}
+        vault.hashicorp.com/role: wordpress
+        vault.hashicorp.com/ca-cert: /vault/tls/ca.crt
+        vault.hashicorp.com/client-cert: /vault/tls/tls.crt
+        vault.hashicorp.com/client-key: /vault/tls/tls.key
+        vault.hashicorp.com/tls-secret: vault-client-tls
     spec:
       affinity:
         podAntiAffinity:
@@ -106,13 +140,10 @@ spec:
       - env:
         - name: WORDPRESS_DB_HOST
           value: wordpress-mariadb
-        - name: WORDPRESS_DB_USER
-          value: wordpress
-        - name: WORDPRESS_DB_PASSWORD
-          valueFrom:
-            secretKeyRef:
-              name: wordpress-mariadb
-              key: mariadb-password
+        - name: WORDPRESS_DB_USER_FILE
+          value: /vault/secrets/db-username
+        - name: WORDPRESS_DB_PASSWORD_FILE
+          value: /vault/secrets/db-password
         - name: WORDPRESS_DB_NAME
           value: wordpress
         image: registry-1.docker.io/library/wordpress:{{ wordpress_version }}
@@ -165,6 +196,7 @@ spec:
       securityContext:
         fsGroup: 82
         fsGroupChangePolicy: Always
+      serviceAccountName: wordpress
       terminationGracePeriodSeconds: 30
       volumes:
       - name: angie-config
