@@ -17,6 +17,8 @@ vault_url: https://vault-internal:8200
 vault_debug: '{{ debug | default(true) }}'
 vault_unseal_file: secrets/vault_unseal.txt
 vault_unseal_secret: vault-unseal-keys
+vault_unseal_retries: 40
+vault_unseal_delay: 15
 vault_token_file: secrets/vault_token.txt
 
 vault_cert:
@@ -33,18 +35,38 @@ vault_cert:
   - apiVersion: cert-manager.io/v1
     kind: Certificate
     metadata:
+      name: vault-root-ca
+      namespace: cert-manager
+    spec:
+      isCA: true
+      commonName: "VAULT ROOT CA"
+      secretName: vault-root-ca
+      issuerRef:
+        name: selfsigned-vault-issuer
+        kind: ClusterIssuer
+  - apiVersion: cert-manager.io/v1
+    kind: ClusterIssuer
+    metadata:
+      name: shared-vault-issuer
+    spec:
+      ca:
+        secretName: vault-root-ca
+  - apiVersion: cert-manager.io/v1
+    kind: Certificate
+    metadata:
       name: vault-server-tls
       namespace: '{{ vault_release_namespace }}'
     spec:
-      secretName: vault-ha-tls
+      secretName: vault-server-tls
       issuerRef:
-        name: selfsigned-vault-issuer
+        name: shared-vault-issuer
         kind: ClusterIssuer
       commonName: vault.{{ vault_release_namespace }}.svc.{{
         vault_cluster_domain }}
       dnsNames:
         - '{{ vault_release_name }}'
         - '{{ vault_release_name }}.{{ vault_release_namespace }}'
+        - '{{ vault_release_name }}.{{ vault_release_namespace }}.svc'
         - '{{ vault_release_name }}.{{ vault_release_namespace }}.svc.{{
           vault_cluster_domain }}'
         - '*.vault-internal'
@@ -52,7 +74,7 @@ vault_cert:
           vault_cluster_domain }}'
       ipAddresses:
         - '127.0.0.1'
-vault_cert_mountpath: /vault/userconfig/vault-ha-tls
+vault_cert_mountpath: /vault/userconfig/vault-server-tls
 vault_cluster_domain: cluster.local
 vault_release_values:
   global:
@@ -73,17 +95,17 @@ vault_release_values:
       activeNodePort: 32201
       standbyNodePort: 32202
     volumes:
-      - name: userconfig-vault-ha-tls
+      - name: userconfig-vault-server-tls
         secret:
           defaultMode: 420
-          secretName: vault-ha-tls
+          secretName: vault-server-tls
       - name: unseal-keys
         secret:
           secretName: '{{ vault_unseal_secret }}'
           optional: true
     volumeMounts:
       - mountPath: '{{ vault_cert_mountpath }}'
-        name: userconfig-vault-ha-tls
+        name: userconfig-vault-server-tls
         readOnly: true
     standalone:
       enabled: false
@@ -123,7 +145,7 @@ vault_release_values:
             mountPath: /etc/vault/unseal
             readOnly: true
           - mountPath: '{{ vault_cert_mountpath }}'
-            name: userconfig-vault-ha-tls
+            name: userconfig-vault-server-tls
             readOnly: true
         env:
           - name: VAULT_CACERT

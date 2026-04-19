@@ -65,16 +65,18 @@
     wait: true
     wait_timeout: '{{ vault_wait_timeout }}'
 
-- name: Wait for vault pods ready
+- name: Wait for all vault pods ready
+  vars:
+    result: '{{ _vault_sts.result }}'
   kubernetes.core.k8s:
-    kind: Pod
-    label_selectors:
-      - app.kubernetes.io/instance={{ vault_release_name }}
+    kind: StatefulSet
+    name: '{{ vault_release_name }}'
     namespace: '{{ vault_release_namespace }}'
     kubeconfig: '{{ vault_kubeconfig }}'
-    wait: true
-    wait_condition:
-      type: Ready
-      status: 'True'
-    wait_timeout: '{{ vault_wait_timeout }}'
+  register: _vault_sts
+  retries: '{{ vault_unseal_retries }}'
+  delay: '{{ vault_unseal_delay }}'
+  until:
+    - result.status.readyReplicas is defined
+    - result.status.readyReplicas == result.spec.replicas
 ...
