@@ -100,8 +100,10 @@ rm vagrant.box
 - **Vagrant 2.4.9**
 - **VirtualBox 7.2.6_SUSE r172322**
 - **Ansible 2.20.4**
+- **Ansible community.hashi_vault collection 7.1.0**
 - **Python 3.13.12**
 - **Python client for kubernetes 35.0.0**
+- **Python hvac 2.4.0**
 - **kubectl v1.35.3**
 - **helm v3.20.1**
 - **helm-diff v3.15.5**
