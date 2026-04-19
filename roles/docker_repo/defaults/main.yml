@@ -1,0 +1,8 @@
+---
+docker_repo_mirror: https://mirror.yandex.ru/mirrors/download.docker.com
+docker_repo_url: '{{ docker_repo_mirror }}/linux/ubuntu'
+docker_repo_signing_key: '{{ docker_repo_url }}/gpg'
+docker_repo_signing_key_path: /etc/apt/keyrings/docker.asc
+docker_repo_signing_key_checksum: >-
+  sha256:1500c1f56fa9e26b9b8f42452a553675796ade0807cdce11975eb98170b3a570
+...

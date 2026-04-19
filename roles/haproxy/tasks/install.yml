@@ -1,0 +1,14 @@
+---
+- name: Add vbernat haproxy repository from PPA and install its signing key
+  ansible.builtin.apt_repository:
+    repo: ppa:vbernat/haproxy-{{ haproxy_version }}
+
+- name: Install haproxy
+  ansible.builtin.apt:
+    name: haproxy={{ haproxy_version }}.*
+    update_cache: true
+    cache_valid_time: 3600
+    state: present
+  retries: 10
+  delay: 10
+...

@@ -1,0 +1,15 @@
+---
+- name: Import install tasks
+  ansible.builtin.import_tasks: install.yml
+  become: false
+  delegate_to: localhost
+  run_once: true
+  tags: [vault, vault_install]
+
+- name: Import unseal tasks
+  ansible.builtin.import_tasks: unseal.yml
+  become: false
+  delegate_to: localhost
+  run_once: true
+  tags: [vault, vault_unseal]
+...

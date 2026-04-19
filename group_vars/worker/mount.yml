@@ -1,0 +1,7 @@
+---
+disk_label_labels: [disk01]
+mount_filesystems:
+  - dev: /dev/disk/by-partlabel/disk01
+    path: /var/lib/longhorn
+    fstype: xfs
+...

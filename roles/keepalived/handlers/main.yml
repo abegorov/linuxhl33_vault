@@ -1,0 +1,6 @@
+---
+- name: Reload keepalived service
+  ansible.builtin.systemd_service:
+    name: keepalived.service
+    state: reloaded
+...

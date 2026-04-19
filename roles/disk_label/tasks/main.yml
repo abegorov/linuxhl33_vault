@@ -1,0 +1,12 @@
+---
+- name: Create a new GPT partition and label it
+  community.general.parted:
+    device: /dev/{{ item[0] }}
+    label: gpt
+    name: '{{ item[1] }}'
+    number: 1
+    state: present
+  loop: '{{ disk_label_free |
+    ansible.builtin.zip(disk_label_free_labels) }}'
+  tags: [disk_label]
+...

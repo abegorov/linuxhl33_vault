@@ -1,0 +1,7 @@
+---
+etcdctl_endpoints: |-
+  {%- for host in groups["control"] -%}
+  https://{{ hostvars[host].ip_address }}:2379
+  {{- ',' if not loop.last else '' -}}
+  {%- endfor -%}
+...

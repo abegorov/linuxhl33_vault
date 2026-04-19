@@ -1,0 +1,26 @@
+---
+longhorn_version: 1.11.1
+longhorn_manifest: https://raw.githubusercontent.com/longhorn/longhorn/v{{
+  longhorn_version }}/deploy/longhorn.yaml
+longhorn_cli_url: https://github.com/longhorn/cli/releases/download/v{{
+  longhorn_version }}/longhornctl-linux-amd64
+longhorn_cli_checksum: >-
+  sha256:2b2a65bb5cf6e629f56aceefba5cc2ba1dea39a5fd4c9bd982048e7ea4a24b29
+
+longhorn_packages:
+  - open-iscsi
+  - nfs-common
+  - bash
+  - curl
+  - util-linux
+  - grep
+  - gawk
+  - cryptsetup
+  - dmsetup
+longhorn_modprobe:
+  - nfs
+  - dm_crypt
+
+longhorn_install_longhornctl: false
+longhorn_kubeconfig: secrets/kubeconfig
+...

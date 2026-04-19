@@ -1,0 +1,61 @@
+---
+- name: Load k8s required kernel modules
+  community.general.modprobe:
+    name: '{{ item }}'
+    persistent: present
+    state: present
+  loop: '{{ kubernetes_modprobe }}'
+
+- name: Update k8s sysctl values
+  ansible.posix.sysctl:
+    name: '{{ item.key }}'
+    value: '{{ item.value }}'
+    reload: true
+    sysctl_file: '{{ kubernetes_sysctl_file }}'
+  loop: '{{ kubernetes_sysctl_settings | ansible.builtin.dict2items }}'
+  loop_control:
+    label: '{{ item.key }}={{ item.value }}'
+
+- name: Check cri disabled
+  ansible.builtin.lineinfile:
+    name: /etc/containerd/config.toml
+    regexp: '^\s*disabled_plugins\s*=\s*\[.*"cri".*\]'
+    state: absent
+  check_mode: true
+  register: _kubernetes_cri_disabled
+
+- name: Restore containerd configuration if cri not enabled
+  when: _kubernetes_cri_disabled.found | default(1) > 0
+  block:
+    - name: Restore containerd configuration file
+      ansible.builtin.shell: >-
+        containerd config default > /etc/containerd/config.toml
+      changed_when: true
+
+    - name: Restart containerd with new configuration
+      ansible.builtin.systemd_service:
+        name: containerd.service
+        state: restarted
+
+- name: Update kubelet extra args
+  ansible.builtin.copy:
+    content: |
+      KUBELET_EXTRA_ARGS={{ kubernetes_kubelet_args | ansible.builtin.quote }}
+    dest: /etc/default/kubelet
+    owner: root
+    group: root
+    mode: '0644'
+  register: _kubernetes_kubelet_extra_args
+
+- name: Restart kubelet if args changed
+  ansible.builtin.systemd_service:
+    name: kubelet.service
+    state: restarted
+  when: _kubernetes_kubelet_extra_args.changed  # noqa: no-handler
+
+- name: Import cluster tasks
+  ansible.builtin.import_tasks: cluster.yml
+
+- name: Import apply tasks
+  ansible.builtin.import_tasks: apply.yml
+...

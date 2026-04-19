@@ -1,0 +1,56 @@
+---
+kubernetes_debug: '{{ debug }}'
+
+kubernetes_mirror: https://mirror.yandex.ru/mirrors/pkgs.k8s.io
+kubernetes_version: '1.35'
+kubernetes_repo_url: '{{ kubernetes_mirror }}/core/stable/v{{
+  kubernetes_version }}/deb/'
+
+kubernetes_signing_key: '{{ kubernetes_mirror }}/core/stable/v{{
+  kubernetes_version }}/deb/Release.key'
+kubernetes_signing_key_path: /etc/apt/keyrings/kubernetes-apt-keyring.key
+kubernetes_signing_key_checksum: >-
+  sha256:7627818cf7bae52f9008c93e8b1f961f53dea11d40891778de216fb1b43be54d
+
+kubernetes_kubelet_args: ''
+kubernetes_init_host: '{{ ansible_play_hosts | first }}'
+kubernetes_init_args: ''
+kubernetes_join_args: ''
+
+kubernetes_kubectl_install: true
+
+kubernetes_modprobe:
+  - overlay
+  - br_netfilter
+kubernetes_sysctl_settings:
+  net.ipv4.ip_forward: 1
+  net.bridge.bridge-nf-call-iptables: 1
+  net.bridge.bridge-nf-call-ip6tables: 1
+kubernetes_sysctl_file: /etc/sysctl.d/99-kubernetes.conf
+
+kubernetes_kubeconfig: secrets/kubeconfig
+kubernetes_network_manifest_template: kube-flannel.j2
+kubernetes_flannel_network: 10.244.0.0/16
+kubernetes_flannel_iface: eth0
+
+kubernetes_gateway_api: true
+kubernetes_gateway_api_version: '1.4.1'
+kubernetes_gateway_api_manifest: >-
+  https://github.com/kubernetes-sigs/gateway-api/releases/download/v{{
+  kubernetes_gateway_api_version }}/standard-install.yaml
+
+kubernetes_cert_manager: true
+kubernetes_cert_manager_version: '1.20.0'
+kubernetes_cert_manager_manifest: >-
+  https://github.com/cert-manager/cert-manager/releases/download/v{{
+  kubernetes_cert_manager_version }}/cert-manager.yaml
+
+kubernetes_gateway:
+  install: true
+  name: eg
+  namespace: envoy-gateway-system
+  ref: oci://docker.io/envoyproxy/gateway-helm
+  version: v1.7.1
+
+kubernetes_wait_timeout: 600
+...

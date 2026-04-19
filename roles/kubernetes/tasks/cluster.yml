@@ -1,0 +1,50 @@
+---
+- name: Bootstrap initial cluster
+  ansible.builtin.command:
+    cmd: kubeadm init --skip-phases=show-join-command {{
+      kubernetes_init_args }}
+    creates: /etc/kubernetes/manifests/kube-apiserver.yaml
+  when: kubernetes_init_host == inventory_hostname
+
+- name: Get cluster admin config
+  ansible.builtin.slurp:
+    src: /etc/kubernetes/admin.conf
+  delegate_to: '{{ kubernetes_init_host }}'
+  run_once: true
+  register: _kubernetes_admin_conf
+  no_log: '{{ not kubernetes_debug }}'
+
+- name: Import kubectl tasks
+  ansible.builtin.import_tasks: kubectl.yml
+
+- name: Check kubelet configuration exists
+  ansible.builtin.stat:
+    path: /etc/kubernetes/kubelet.conf
+  register: _kubernetes_kubelet_conf
+
+- name: Get cluster join information
+  when: ansible_play_hosts | map("ansible.builtin.extract", hostvars,
+    ["_kubernetes_kubelet_conf", "stat", "exists"]) | reject | list |
+    length > 0
+  block:
+    - name: Get join command
+      ansible.builtin.command: kubeadm token create --print-join-command
+      changed_when: true
+      delegate_to: '{{ kubernetes_init_host }}'
+      run_once: true
+      register: _kubernetes_join_command
+
+    - name: Get join certificate key
+      ansible.builtin.command: kubeadm init phase upload-certs --upload-certs
+      changed_when: true
+      delegate_to: '{{ kubernetes_init_host }}'
+      run_once: true
+      register: _kubernetes_certificate_key
+
+    - name: Join kubernetes cluster
+      ansible.builtin.command:
+        cmd: '{{ _kubernetes_join_command.stdout }} --certificate-key
+          {{ _kubernetes_certificate_key.stdout_lines | last }}
+          {{ kubernetes_join_args }}'
+        creates: /etc/kubernetes/kubelet.conf
+...

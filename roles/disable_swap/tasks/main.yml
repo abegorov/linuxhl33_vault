@@ -1,0 +1,19 @@
+---
+- name: Gather hardware facts
+  ansible.builtin.setup:
+    gather_subset:
+      - '!all'
+      - '!min'
+      - 'hardware'
+
+- name: Disable all active swap
+  ansible.builtin.command: swapoff -a
+  changed_when: true
+  when: ansible_facts.swaptotal_mb > 0
+
+- name: Remove all swap entries from /etc/fstab
+  ansible.builtin.lineinfile:
+    path: /etc/fstab
+    regex: '^\s*[^#](\S+\s+){2}swap\s'
+    state: absent
+...

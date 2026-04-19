@@ -1,0 +1,37 @@
+---
+- name: Download kubernetes repository key
+  ansible.builtin.get_url:
+    url: '{{ kubernetes_signing_key }}'
+    dest: '{{ kubernetes_signing_key_path }}'
+    checksum: '{{ kubernetes_signing_key_checksum }}'
+    owner: root
+    group: root
+    mode: '0644'
+
+- name: Add kubernetes repository
+  ansible.builtin.apt_repository:
+    repo: >-
+      deb
+      [arch=amd64 signed-by={{ kubernetes_signing_key_path }}]
+      {{ kubernetes_repo_url }}
+      /
+    filename: kubernetes
+    state: present
+
+- name: Install kubeadm, kubelet and containerd
+  ansible.builtin.apt:
+    name: [kubeadm, kubelet, containerd.io]
+    update_cache: true
+    cache_valid_time: 3600
+    state: present
+  retries: 10
+  delay: 10
+
+- name: Install kubectl
+  ansible.builtin.apt:
+    name: kubectl
+    state: present
+  retries: 10
+  delay: 10
+  when: kubernetes_kubectl_install
+...

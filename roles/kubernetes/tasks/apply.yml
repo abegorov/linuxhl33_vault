@@ -1,0 +1,65 @@
+---
+- name: Apply kubernetes network manifest
+  kubernetes.core.k8s:
+    template:
+      path: '{{ role_path }}/templates/{{
+        kubernetes_network_manifest_template }}'
+      lstrip_blocks: false
+    apply: true
+    server_side_apply:
+      field_manager: ansible
+      force_conflicts: true
+    kubeconfig: '{{ kubernetes_kubeconfig }}'
+    wait: true
+    wait_timeout: '{{ kubernetes_wait_timeout }}'
+  become: false
+  delegate_to: localhost
+  run_once: true
+  when: kubernetes_network_manifest_template is truthy
+
+- name: Apply kubernetes gateway api manifest
+  kubernetes.core.k8s:
+    src: '{{ kubernetes_gateway_api_manifest }}'
+    apply: true
+    server_side_apply:
+      field_manager: ansible
+      force_conflicts: true
+    kubeconfig: '{{ kubernetes_kubeconfig }}'
+    wait: true
+    wait_timeout: '{{ kubernetes_wait_timeout }}'
+  become: false
+  delegate_to: localhost
+  run_once: true
+  when: kubernetes_gateway_api
+
+- name: Apply kubernetes cert manager manifest
+  kubernetes.core.k8s:
+    src: '{{ kubernetes_cert_manager_manifest }}'
+    apply: true
+    server_side_apply:
+      field_manager: ansible
+      force_conflicts: true
+    kubeconfig: '{{ kubernetes_kubeconfig }}'
+    wait: true
+    wait_timeout: '{{ kubernetes_wait_timeout }}'
+  become: false
+  delegate_to: localhost
+  run_once: true
+  when: kubernetes_cert_manager
+
+- name: Install kubenetes gateway
+  kubernetes.core.helm:
+    name: '{{ kubernetes_gateway.name | default(omit) }}'
+    chart_ref: '{{ kubernetes_gateway.ref | default(omit) }}'
+    chart_version: '{{ kubernetes_gateway.version | default(omit) }}'
+    release_namespace: '{{ kubernetes_gateway.namespace | default(omit) }}'
+    create_namespace: true
+    kubeconfig: '{{ kubernetes_kubeconfig }}'
+    replace: true
+    wait: true
+    wait_timeout: '{{ kubernetes_wait_timeout }}s'
+  become: false
+  delegate_to: localhost
+  run_once: true
+  when: kubernetes_gateway.install | default(false)
+...

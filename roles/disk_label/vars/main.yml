@@ -1,0 +1,12 @@
+---
+disk_label_used: '{{ disk_facts_sigs | map(attribute="device") |
+  ansible.builtin.unique }}'
+disk_label_used_labels: '{{ disk_facts_lsblk |
+  selectattr("partlabel") | map(attribute="partlabel") |
+  ansible.builtin.unique }}'
+disk_label_free: '{{ disk_facts_lsblk |
+  selectattr("type", "eq", "disk") | map(attribute="kname") |
+  ansible.builtin.difference(disk_label_used) }}'
+disk_label_free_labels: '{{ disk_label_labels |
+  ansible.builtin.difference(disk_label_used_labels) }}'
+...

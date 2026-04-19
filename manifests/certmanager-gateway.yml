@@ -1,0 +1,14 @@
+---
+apiVersion: cert-manager.io/v1
+kind: Certificate
+metadata:
+  name: eg-cert
+  namespace: default
+spec:
+  secretName: eg-tls-secret
+  issuerRef:
+    name: selfsigned-issuer
+    kind: Issuer
+  dnsNames:
+    - '{{ certmanager_gateway_dns_name }}'
+...

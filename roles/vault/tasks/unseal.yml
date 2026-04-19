@@ -1,0 +1,80 @@
+---
+- name: Check Vault Initialization Status
+  kubernetes.core.k8s_exec:
+    kubeconfig: '{{ vault_kubeconfig }}'
+    namespace: '{{ vault_release_namespace }}'
+    pod: '{{ vault_release_name }}-0'
+    container: vault
+    command: vault status -ca-cert={{
+      (vault_cert_mountpath + '/ca.crt') | ansible.builtin.quote }}
+      -format=json
+  changed_when: false
+  failed_when: _vault_status.rc not in [0, 2]
+  register: _vault_status
+
+- name: Initialize Vault
+  no_log: '{{ not vault_debug }}'
+  when: not (_vault_status.stdout | from_json).initialized
+  block:
+    - name: Initialize Vault via vault operator
+      kubernetes.core.k8s_exec:
+        kubeconfig: '{{ vault_kubeconfig }}'
+        namespace: '{{ vault_release_namespace }}'
+        pod: '{{ vault_release_name }}-0'
+        container: vault
+        command: vault operator init -ca-cert={{
+          (vault_cert_mountpath + '/ca.crt') | ansible.builtin.quote }}
+          -format=json -key-shares=1 -key-threshold=1
+      changed_when: true
+      failed_when: _vault_status.rc not in [0, 2]
+      register: _vault_init
+
+    - name: Update Vault unseal key
+      ansible.builtin.copy:
+        content: '{{ (_vault_init.stdout | from_json).unseal_keys_b64 |
+          join("\n") }}'
+        dest: '{{ vault_unseal_file }}'
+        mode: '0600'
+
+    - name: Update Vault root token
+      ansible.builtin.copy:
+        content: '{{ (_vault_init.stdout | from_json).root_token }}'
+        dest: '{{ vault_token_file }}'
+        mode: '0600'
+
+- name: Update vault unseal secret
+  vars:
+    keys: '{{ lookup("ansible.builtin.file",
+      vault_unseal_file).splitlines() |
+      map("ansible.builtin.b64encode") }}'
+  kubernetes.core.k8s:
+    resource_definition:
+      apiVersion: v1
+      kind: Secret
+      metadata:
+        namespace: '{{ vault_release_namespace }}'
+        name: '{{ vault_unseal_secret }}'
+      type: Opaque
+      data: '{{ dict(query("ansible.builtin.sequence", start=0,
+        count=(keys | length), format="key%d") | zip(keys)) }}'
+    apply: true
+    server_side_apply:
+      field_manager: ansible
+      force_conflicts: true
+    kubeconfig: '{{ vault_kubeconfig }}'
+    wait: true
+    wait_timeout: '{{ vault_wait_timeout }}'
+
+- name: Wait for vault pods ready
+  kubernetes.core.k8s:
+    kind: Pod
+    label_selectors:
+      - app.kubernetes.io/instance={{ vault_release_name }}
+    namespace: '{{ vault_release_namespace }}'
+    kubeconfig: '{{ vault_kubeconfig }}'
+    wait: true
+    wait_condition:
+      type: Ready
+      status: 'True'
+    wait_timeout: '{{ vault_wait_timeout }}'
+...

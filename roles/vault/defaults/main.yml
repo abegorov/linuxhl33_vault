@@ -1,0 +1,154 @@
+---
+vault_chart_ref: git+https://github.com/hashicorp/vault-helm@vault-{{
+  vault_chart_ref_version }}.tgz?ref=v{{ vault_chart_ref_version }}
+vault_chart_ref_version: 0.32.0
+vault_chart_repo_url: '{{ omit }}'
+vault_chart_version: '{{ omit }}'
+vault_kubeconfig: secrets/kubeconfig
+vault_release_name: vault
+vault_release_namespace: vault
+vault_replicas: 3
+vault_startup_retries: 60
+vault_startup_delay: 10
+vault_version: 2.0.0
+vault_wait_timeout: 600
+
+vault_url: https://vault-internal:8200
+vault_debug: '{{ debug | default(true) }}'
+vault_unseal_file: secrets/vault_unseal.txt
+vault_unseal_secret: vault-unseal-keys
+vault_token_file: secrets/vault_token.txt
+
+vault_cert:
+  - apiVersion: v1
+    kind: Namespace
+    metadata:
+      name: '{{ vault_release_namespace }}'
+  - apiVersion: cert-manager.io/v1
+    kind: ClusterIssuer
+    metadata:
+      name: selfsigned-vault-issuer
+    spec:
+      selfSigned: {}
+  - apiVersion: cert-manager.io/v1
+    kind: Certificate
+    metadata:
+      name: vault-server-tls
+      namespace: '{{ vault_release_namespace }}'
+    spec:
+      secretName: vault-ha-tls
+      issuerRef:
+        name: selfsigned-vault-issuer
+        kind: ClusterIssuer
+      commonName: vault.{{ vault_release_namespace }}.svc.{{
+        vault_cluster_domain }}
+      dnsNames:
+        - '{{ vault_release_name }}'
+        - '{{ vault_release_name }}.{{ vault_release_namespace }}'
+        - '{{ vault_release_name }}.{{ vault_release_namespace }}.svc.{{
+          vault_cluster_domain }}'
+        - '*.vault-internal'
+        - '*.vault-internal.{{ vault_release_namespace }}.svc.{{
+          vault_cluster_domain }}'
+      ipAddresses:
+        - '127.0.0.1'
+vault_cert_mountpath: /vault/userconfig/vault-ha-tls
+vault_cluster_domain: cluster.local
+vault_release_values:
+  global:
+    enabled: true
+    tlsDisable: false
+  injector:
+    enabled: true
+    agentImage:
+      tag: '{{ vault_version }}'
+  server:
+    dataStorage:
+      size: 1Gi
+    image:
+      tag: '{{ vault_version }}'
+    service:
+      type: NodePort
+      nodePort: 32200
+      activeNodePort: 32201
+      standbyNodePort: 32202
+    volumes:
+      - name: userconfig-vault-ha-tls
+        secret:
+          defaultMode: 420
+          secretName: vault-ha-tls
+      - name: unseal-keys
+        secret:
+          secretName: '{{ vault_unseal_secret }}'
+          optional: true
+    volumeMounts:
+      - mountPath: '{{ vault_cert_mountpath }}'
+        name: userconfig-vault-ha-tls
+        readOnly: true
+    standalone:
+      enabled: false
+    ha:
+      enabled: true
+      replicas: '{{ vault_replicas }}'
+      raft:
+        enabled: true
+        setNodeId: true
+        config: |
+          cluster_name = "vault-integrated-storage"
+          ui = true
+          listener "tcp" {
+            tls_disable = 0
+            address = "[::]:8200"
+            cluster_address = "[::]:8201"
+            tls_cert_file = "{{ vault_cert_mountpath }}/tls.crt"
+            tls_key_file  = "{{ vault_cert_mountpath }}/tls.key"
+            tls_client_ca_file = "{{ vault_cert_mountpath }}/ca.crt"
+          }
+          storage "raft" {
+            path = "/vault/data"
+          {% for n in range(vault_replicas) %}
+            retry_join {
+              leader_api_addr = "https://vault-{{ n }}.vault-internal:8200"
+              leader_ca_cert_file = "{{ vault_cert_mountpath }}/ca.crt"
+            }
+          {% endfor %}
+          }
+          disable_mlock = true
+          service_registration "kubernetes" {}
+    extraContainers:
+      - name: auto-unseal
+        image: hashicorp/vault:{{ vault_version }}
+        volumeMounts:
+          - name: unseal-keys
+            mountPath: /etc/vault/unseal
+            readOnly: true
+          - mountPath: '{{ vault_cert_mountpath }}'
+            name: userconfig-vault-ha-tls
+            readOnly: true
+        env:
+          - name: VAULT_CACERT
+            value: '{{ vault_cert_mountpath + "/ca.crt" }}'
+        command:
+          - /bin/sh
+          - -c
+          - |
+            while true; do
+              # Check if keys exist in the mounted volume
+              if [ -f /etc/vault/unseal/key0 ]; then
+                vault status >/dev/null
+                if [ $? -eq 2 ]; then
+                  echo "Vault is sealed. Unsealing..."
+                  for key in /etc/vault/unseal/key*; do
+                    vault operator unseal "$(cat "${key}")"
+                  done
+                fi
+              else
+                echo "Waiting for unseal keys to be added to the secret..."
+              fi
+              sleep 15
+            done
+  csi:
+    agent:
+      image:
+        tag: '{{ vault_version }}'
+...

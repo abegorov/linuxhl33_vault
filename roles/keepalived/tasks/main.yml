@@ -1,0 +1,28 @@
+---
+- name: Install keepalived
+  ansible.builtin.apt:
+    name: keepalived
+    update_cache: true
+    cache_valid_time: 3600
+    state: present
+  retries: 10
+  delay: 10
+  tags: [keepalived]
+
+- name: Update keepalived configuration
+  ansible.builtin.copy:
+    content: '{{ keepalived_config }}'
+    dest: /etc/keepalived/keepalived.conf
+    owner: root
+    group: root
+    mode: '0644'
+  tags: [keepalived]
+  notify: Reload keepalived service
+
+- name: Enable and start keepalived service
+  ansible.builtin.systemd_service:
+    name: keepalived.service
+    enabled: true
+    state: started
+  tags: [keepalived]
+...

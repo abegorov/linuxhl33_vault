@@ -1,0 +1,46 @@
+---
+haproxy_k8s_control: '{{ groups["control"] }}'
+haproxy_k8s_workers: '{{ groups["worker"] }}'
+
+haproxy_config_append:
+  defaults:
+    -
+    - default-server inter 100 fall 3 rise 2 on-marked-down shutdown-sessions
+  listen stats:
+    - mode http
+    - bind *:7000
+    - stats enable
+    - stats uri /
+  listen kubernetes:
+    - bind *:{{ k8s_lb_port }} transparent
+    - option tcp-check
+    - balance roundrobin
+    - |
+      {% for server in haproxy_k8s_control %}
+      server {{ server }} {{ hostvars[server].ip_address }}:6443 check
+      {% endfor %}
+  listen http:
+    - bind *:80 transparent
+    - option tcp-check
+    - balance roundrobin
+    - |
+      {% for server in haproxy_k8s_workers %}
+      server {{ server }} {{ hostvars[server].ip_address }}:30080 check
+      {% endfor %}
+  listen https:
+    - bind *:443 transparent
+    - option tcp-check
+    - balance roundrobin
+    - |
+      {% for server in haproxy_k8s_workers %}
+      server {{ server }} {{ hostvars[server].ip_address }}:30443 check
+      {% endfor %}
+  listen vault:
+    - bind *:8200 transparent
+    - option tcp-check
+    - balance roundrobin
+    - |
+      {% for server in haproxy_k8s_workers %}
+      server {{ server }} {{ hostvars[server].ip_address }}:32200 check
+      {% endfor %}
+...

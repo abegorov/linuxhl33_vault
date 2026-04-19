@@ -1,0 +1,18 @@
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: wordpress
+  namespace: default
+  labels:
+    app.kubernetes.io/instance: wordpress
+    app.kubernetes.io/name: wordpress
+    app.kubernetes.io/part-of: wordpress
+data:
+  php-fpm.conf: |
+    [www]
+    listen = /run/php-fpm.sock
+    listen.owner = 82
+    listen.group = 82
+    listen.mode = 0660
+...

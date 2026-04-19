@@ -1,0 +1,27 @@
+---
+- name: Create filesystems if not exists
+  community.general.filesystem:
+    dev: '{{ item.dev }}'
+    fstype: '{{ item.fstype }}'
+    force: false
+    state: present
+  loop: '{{ mount_filesystems }}'
+  loop_control:
+    label: '{{ item.dev }}'
+  tags: [mount]
+
+- name: Mount filesystems
+  ansible.posix.mount:
+    src: '{{ item.dev }}'
+    path: '{{ item.path }}'
+    fstype: '{{ item.fstype }}'
+    boot: '{{ item.boot | default(true) }}'
+    opts: '{{ item.opts | default(omit) }}'
+    dump: '{{ item.dump | default(omit) }}'
+    passno: '{{ item.passno | default(omit) }}'
+    state: mounted
+  loop: '{{ mount_filesystems }}'
+  loop_control:
+    label: '{{ item.dev }}'
+  tags: [mount]
+...

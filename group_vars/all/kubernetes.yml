@@ -1,0 +1,8 @@
+---
+kubernetes_kubelet_args: --node-ip {{ ip_address }}
+kubernetes_init_host: '{{ groups["control"] | first }}'
+
+kubernetes_flannel_network: '10.244.0.0/16'
+kubernetes_flannel_iface: '{{ "eth1" if not yandex_cloud | default(false) else
+  "eth0" }}'
+...

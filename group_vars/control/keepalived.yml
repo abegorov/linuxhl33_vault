@@ -1,0 +1,37 @@
+---
+keepalived_iface: eth1
+keepalived_config: |
+  global_defs {
+    vrrp_version 3
+    vrrp_strict
+    max_auto_priority
+    vrrp_priority -20
+    checker_priority -20
+    bfd_priority -20
+    vrrp_no_swap
+    checker_no_swap
+    bfd_no_swap
+    reload_check_config
+  }
+
+  vrrp_track_process HAPROXY {
+    process haproxy
+  }
+
+  vrrp_instance VRRP_11 {
+    state BACKUP
+    interface {{ keepalived_iface }}
+    priority {{ 150 - groups['control'].index(inventory_hostname) }}
+    virtual_router_id 11
+    advert_int 0.1
+    mcast_src_ip {{ ip_address }}
+    accept
+    nopreempt
+    virtual_ipaddress {
+      {{ k8s_lb_ip }}
+    }
+    track_process {
+      HAPROXY
+    }
+  }
+...

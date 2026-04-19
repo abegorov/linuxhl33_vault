@@ -1,0 +1,19 @@
+---
+- name: Apply kubernetes manifests
+  kubernetes.core.k8s:
+    template:
+      path: '{{ item }}'
+      lstrip_blocks: true
+    apply: true
+    server_side_apply:
+      field_manager: '{{ kubernetes_apply_field_manager }}'
+      force_conflicts: true
+    kubeconfig: '{{ kubernetes_apply_kubeconfig }}'
+    wait: true
+    wait_timeout: '{{ kubernetes_apply_wait_timeout }}'
+  become: false
+  delegate_to: localhost
+  run_once: true
+  loop: '{{ kubernetes_apply_manifests }}'
+  tags: [kubernetes_apply]
+...

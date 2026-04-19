@@ -1,0 +1,55 @@
+---
+- name: Create vault cert issuer
+  kubernetes.core.k8s:
+    resource_definition: '{{ vault_cert }}'
+    apply: true
+    server_side_apply:
+      field_manager: ansible
+      force_conflicts: true
+    kubeconfig: '{{ vault_kubeconfig }}'
+    wait: true
+    wait_timeout: '{{ vault_wait_timeout }}'
+
+# - name: Create vault unseal secret
+#   kubernetes.core.k8s:
+#     resource_definition:
+#       apiVersion: v1
+#       kind: Secret
+#       metadata:
+#         namespace: '{{ vault_release_namespace }}'
+#         name: '{{ vault_unseal_secret }}'
+#       type: Opaque
+#       data:
+#         key: ''
+#     force: false
+#     kubeconfig: '{{ vault_kubeconfig }}'
+#     wait: true
+#     wait_timeout: '{{ vault_wait_timeout }}'
+
+- name: Install vault
+  kubernetes.core.helm:
+    name: '{{ vault_release_name }}'
+    chart_ref: '{{ vault_chart_ref }}'
+    chart_repo_url: '{{ vault_chart_repo_url }}'
+    chart_version: '{{ vault_chart_version }}'
+    force: true
+    release_namespace: '{{ vault_release_namespace }}'
+    create_namespace: true
+    release_values: '{{ vault_release_values }}'
+    kubeconfig: '{{ vault_kubeconfig }}'
+    wait: true
+    wait_timeout: '{{ vault_wait_timeout }}s'
+
+- name: Wait for vault startup
+  kubernetes.core.k8s_info:
+    kubeconfig: '{{ vault_kubeconfig }}'
+    kind: Pod
+    name: '{{ vault_release_name }}-0'
+    namespace: '{{ vault_release_namespace }}'
+  register: _vault_pod
+  retries: '{{ vault_startup_retries }}'
+  delay: '{{ vault_startup_delay }}'
+  until:
+    - _vault_pod.resources | length > 0
+    - _vault_pod.resources[0].status.phase == "Running"
+...

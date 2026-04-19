@@ -1,0 +1,9 @@
+---
+- name: Import install tasks
+  ansible.builtin.import_tasks: install.yml
+  tags: [kubernetes, kubernetes_install]
+
+- name: Import config tasks
+  ansible.builtin.import_tasks: config.yml
+  tags: [kubernetes, kubernetes_config]
+...

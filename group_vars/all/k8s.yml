@@ -1,0 +1,5 @@
+---
+k8s_lb_ip: '{{ "192.168.56.11" if not yandex_cloud | default(false) else
+  k8s_nlb_address }}'
+k8s_lb_port: '{{ 8443 if not yandex_cloud | default(false) else 6443 }}'
+...

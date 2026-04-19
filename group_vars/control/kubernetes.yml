@@ -1,0 +1,26 @@
+---
+kubernetes_init_args: >-
+  --control-plane-endpoint {{ k8s_lb_ip }}:{{ k8s_lb_port }}
+  --pod-network-cidr {{ kubernetes_flannel_network }}
+  --apiserver-advertise-address {{ ip_address }}
+kubernetes_join_args: >-
+  --control-plane
+  --apiserver-advertise-address {{ ip_address }}
+
+kubernetes_apply_manifests:
+  - manifests/certmanager-selfsigned-issuer.yml
+  - manifests/certmanager-gateway.yml
+  - manifests/eg-nodeport.yml
+  - manifests/gateway.yml
+  - manifests/http-to-https-redirect.yml
+  - manifests/wordpress-mariadb-secret.yml
+  - manifests/wordpress-mariadb-service-headless.yml
+  - manifests/wordpress-mariadb-service.yml
+  - manifests/wordpress-mariadb.yml
+  - manifests/wordpress-angie-config.yml
+  - manifests/wordpress-config.yml
+  - manifests/wordpress-pvc.yml
+  - manifests/wordpress-service.yml
+  - manifests/wordpress.yml
+  - manifests/wordpress-httproute.yml
+...

@@ -1,0 +1,11 @@
+---
+certmanager_gateway_dns_name: gateway.abegorov.ru
+
+wordpress_mariadb_root_password: '{{ lookup("ansible.builtin.password",
+  "secrets/wordpress_mariadb_root_password.txt", length=26) }}'
+wordpress_mariadb_password: '{{ lookup("ansible.builtin.password",
+  "secrets/wordpress_mariadb_password.txt", length=26) }}'
+wordpress_mariadb_version: '12.2.2-ubi10'
+wordpress_version: '6.9-php8.5-fpm-alpine'
+wordpress_angie_version: '1.11.4-minimal'
+...

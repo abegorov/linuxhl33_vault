@@ -1,0 +1,33 @@
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: wordpress-angie
+  namespace: default
+  labels:
+    app.kubernetes.io/instance: wordpress
+    app.kubernetes.io/name: angie
+    app.kubernetes.io/part-of: wordpress
+data:
+  default.conf: |
+    server {
+        listen 8080;
+        server_name _;
+        root /var/www/html;
+        index index.php;
+
+        access_log /dev/stdout;
+        error_log /dev/stderr;
+
+        location / {
+            try_files $uri $uri/ /index.php?$args;
+        }
+
+        location ~ \.php$ {
+            fastcgi_pass unix:/run/php-fpm.sock;
+            fastcgi_index index.php;
+            include fastcgi_params;
+            fastcgi_param SCRIPT_FILENAME $document_root$fastcgi_script_name;
+        }
+    }
+...

@@ -1,0 +1,31 @@
+---
+- name: Gather distribution facts
+  ansible.builtin.setup:
+    gather_subset:
+      - '!all'
+      - '!min'
+      - 'distribution'
+  tags: [docker_repo]
+
+- name: Download docker repository key
+  ansible.builtin.get_url:
+    url: '{{ docker_repo_signing_key }}'
+    dest: '{{ docker_repo_signing_key_path }}'
+    checksum: '{{ docker_repo_signing_key_checksum }}'
+    owner: root
+    group: root
+    mode: '0644'
+  tags: [docker_repo]
+
+- name: Add docker repository
+  ansible.builtin.apt_repository:
+    repo: >-
+      deb
+      [arch=amd64 signed-by={{ docker_repo_signing_key_path }}]
+      {{ docker_repo_url }}
+      {{ ansible_facts.distribution_release }}
+      stable
+    filename: docker
+    state: present
+  tags: [docker_repo]
+...

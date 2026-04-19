@@ -1,0 +1,53 @@
+---
+- name: Get cluster admin config
+  ansible.builtin.slurp:
+    src: /etc/kubernetes/admin.conf
+  delegate_to: '{{ kubernetes_init_host }}'
+  run_once: true
+  register: _kubernetes_admin_conf
+  no_log: '{{ not kubernetes_debug }}'
+
+- name: Fetch kubectl configuration
+  ansible.builtin.copy:
+    content: '{{ _kubernetes_admin_conf.content |
+      ansible.builtin.b64decode }}'
+    dest: '{{ kubernetes_kubeconfig }}'
+    mode: '0600'
+  become: false
+  delegate_to: localhost
+  run_once: true
+  no_log: '{{ not kubernetes_debug }}'
+
+- name: Conifgure kubectl
+  when: kubernetes_kubectl_install
+  block:
+    - name: Create .kube directory
+      ansible.builtin.file:
+        path: /root/.kube
+        state: directory
+        owner: root
+        group: root
+        mode: '0700'
+
+    - name: Update kubectl configuration
+      ansible.builtin.copy:
+        content: '{{ _kubernetes_admin_conf.content |
+          ansible.builtin.b64decode }}'
+        dest: /root/.kube/config
+        owner: root
+        group: root
+        mode: '0600'
+      no_log: '{{ not kubernetes_debug }}'
+
+    - name: Update kubectl variables for root
+      vars:
+        kubectl_vars:
+          KUBECONFIG: /root/.kube/config
+      ansible.builtin.lineinfile:
+        path: /root/.bashrc
+        regexp: '^export {{ item.key | ansible.builtin.regex_escape }}='
+        line: export {{ item.key }}={{ item.value | ansible.builtin.quote }}
+      loop: '{{ kubectl_vars | ansible.builtin.dict2items }}'
+      loop_control:
+        label: '{{ item.key }}'
+...

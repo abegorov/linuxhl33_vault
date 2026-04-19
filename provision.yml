@@ -1,0 +1,47 @@
+---
+- name: Common provision
+  hosts: [control, worker]
+  become: true
+  gather_facts: false
+  roles:
+    - wait_connection
+    - apt_sources
+    - disable_swap
+
+- name: Load balancer provision
+  hosts: control
+  become: true
+  gather_facts: false
+  pre_tasks:
+    - name: End play if running on Yandex Cloud
+      ansible.builtin.meta: end_host
+      when: yandex_cloud | default(false)
+  roles:
+    - haproxy
+    - keepalived
+
+- name: Kubernetes provision
+  hosts: [control, worker]
+  become: true
+  gather_facts: false
+  roles:
+    - docker_repo
+    - kubernetes
+
+- name: Worker provison
+  hosts: [worker]
+  become: true
+  gather_facts: false
+  roles:
+    - disk_label
+    - mount
+    - longhorn
+
+- name: Apply kubernetes manifests
+  hosts: [control]
+  become: false
+  gather_facts: false
+  roles:
+    - vault
+    - kubernetes_apply
+...

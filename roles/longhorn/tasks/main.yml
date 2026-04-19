@@ -1,0 +1,58 @@
+---
+- name: Install longhorn required packages
+  ansible.builtin.apt:
+    name: '{{ longhorn_packages }}'
+    update_cache: true
+    cache_valid_time: 3600
+    state: present
+  retries: 10
+  delay: 10
+  tags: [longhorn]
+
+- name: Load longhorn required kernel modules
+  community.general.modprobe:
+    name: '{{ item }}'
+    persistent: present
+    state: present
+  loop: '{{ longhorn_modprobe }}'
+  tags: [longhorn]
+
+- name: Remove multipath-tools
+  ansible.builtin.apt:
+    name: multipath-tools
+    state: absent
+  tags: [longhorn]
+
+- name: Enable and start iscsid service
+  ansible.builtin.systemd_service:
+    name: iscsid.service
+    enabled: true
+    state: started
+  tags: [longhorn]
+
+- name: Install longhorn cli
+  ansible.builtin.get_url:
+    url: '{{ longhorn_cli_url }}'
+    dest: /usr/local/sbin/longhornctl
+    checksum: '{{ longhorn_cli_checksum }}'
+    owner: root
+    group: root
+    mode: '0755'
+  when: longhorn_install_longhornctl
+  tags: [longhorn]
+
+- name: Install longhorn
+  kubernetes.core.k8s:
+    src: '{{ longhorn_manifest }}'
+    apply: true
+    server_side_apply:
+      field_manager: ansible
+      force_conflicts: true
+    kubeconfig: '{{ longhorn_kubeconfig }}'
+    wait: true
+    wait_timeout: 300
+  become: false
+  delegate_to: localhost
+  run_once: true
+  tags: [longhorn]
+...
