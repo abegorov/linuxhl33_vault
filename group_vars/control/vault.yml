@@ -1,3 +1,42 @@
 ---
 vault_url: https://{{ k8s_lb_ip }}:8200
+vault_config_validate_certs: false
+
+vault_config_auths:
+  kubernetes:
+    type: kubernetes
+vault_config_engines:
+  database:
+    type: database
+
+vault_config_database_connections:
+  - engine_mountpoint: database
+    connection_name: wordpress-mariadb
+    plugin_name: mysql-database-plugin
+    allowed_roles: wordpress
+    connection_url: !unsafe >-
+      {{username}}:{{password}}@tcp(wordpress-mariadb.default:3306)/
+    connection_username: root
+    connection_password: '{{ wordpress_mariadb_root_password }}'
+vault_config_database_static_roles:
+  - engine_mount_point: database
+    role_name: wordpress
+    connection_name: wordpress-mariadb
+    db_username: wordpress
+    rotation_period: 120
+    rotation_statements: !unsafe >-
+      ALTER USER '{{name}}'@'%' IDENTIFIED BY '{{password}}';
+vault_config_write:
+  sys/policy/wordpress:
+    policy: |
+      path "database/static-creds/wordpress" {
+        capabilities = ["read", "subscribe"]
+      }
+  auth/kubernetes/config:
+    kubernetes_host: https://kubernetes.default.svc.cluster.local:443
+  auth/kubernetes/role/wordpress:
+    audience: vault
+    bound_service_account_names: [wordpress]
+    bound_service_account_namespaces: [default]
+    token_policies: [wordpress]
 ...

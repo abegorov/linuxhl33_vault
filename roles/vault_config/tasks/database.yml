@@ -1,0 +1,36 @@
+---
+- name: Update vault database connections
+  community.hashi_vault.vault_database_connection_configure:
+    url: '{{ vault_config_url }}'
+    validate_certs: '{{ vault_config_validate_certs }}'
+    auth_method: token
+    token: '{{ vault_config_token }}'
+    engine_mount_point: '{{ item.engine_mount_point | default(omit) }}'
+    allowed_roles: '{{ item.allowed_roles }}'
+    connection_name: '{{ item.connection_name }}'
+    plugin_name: '{{ item.plugin_name }}'
+    connection_url: '{{ item.connection_url }}'
+    connection_username: '{{ item.connection_username }}'
+    connection_password: '{{ item.connection_password }}'
+  no_log: '{{ not vault_config_debug }}'
+  loop: '{{ vault_config_database_connections }}'
+  loop_control:
+    label: '{{ item.connection_name }}'
+
+- name: Update vault database static roles
+  community.hashi_vault.vault_database_static_role_create:
+    url: '{{ vault_config_url }}'
+    validate_certs: '{{ vault_config_validate_certs }}'
+    auth_method: token
+    token: '{{ vault_config_token }}'
+    engine_mount_point: '{{ item.engine_mount_point | default(omit) }}'
+    role_name: '{{ item.role_name }}'
+    connection_name: '{{ item.connection_name }}'
+    db_username: '{{ item.db_username }}'
+    rotation_period: '{{ item.rotation_period }}'
+    rotation_statements: '{{ item.rotation_statements }}'
+  no_log: '{{ not vault_config_debug }}'
+  loop: '{{ vault_config_database_static_roles }}'
+  loop_control:
+    label: '{{ item.connection_name }}'
+...

@@ -1,0 +1,17 @@
+---
+vault_config_debug: '{{ debug | default(true) }}'
+
+vault_config_url: '{{ vault_url | default("https://127.0.0.1:8200") }}'
+vault_config_validate_certs: '{{ vault_validate_certs | default(true) }}'
+vault_config_token: '{{ lookup("ansible.builtin.file",
+  "secrets/vault_token.txt") }}'
+vault_config_auths:
+  kubernetes:
+    type: kubernetes
+vault_config_engines:
+  database:
+    type: database
+vault_config_database_connections: []
+vault_config_database_static_roles: []
+vault_config_write: {}
+...

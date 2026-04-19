@@ -1,0 +1,23 @@
+---
+- name: Check existing auth providers
+  community.hashi_vault.vault_read:
+    url: '{{ vault_config_url }}'
+    validate_certs: '{{ vault_config_validate_certs }}'
+    auth_method: token
+    token: '{{ vault_config_token }}'
+    path: sys/auth
+  register: _vault_config_existing_auths
+
+- name: Update vault auths
+  community.hashi_vault.vault_write:
+    url: '{{ vault_config_url }}'
+    validate_certs: '{{ vault_config_validate_certs }}'
+    auth_method: token
+    token: '{{ vault_config_token }}'
+    path: sys/auth/{{ item.key }}
+    data: '{{ item.value }}'
+  when: item.key + '/' not in _vault_config_existing_auths.data.data
+  loop: '{{ vault_config_auths | ansible.builtin.dict2items }}'
+  loop_control:
+    label: '{{ item.key }}'
+...

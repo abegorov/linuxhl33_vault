@@ -1,0 +1,29 @@
+---
+- name: Import engines tasks
+  become: false
+  delegate_to: localhost
+  run_once: true
+  ansible.builtin.import_tasks: engines.yml
+  tags: [vault_config]
+
+- name: Import auth tasks
+  become: false
+  delegate_to: localhost
+  run_once: true
+  ansible.builtin.import_tasks: auths.yml
+  tags: [vault_config]
+
+- name: Import database tasks
+  become: false
+  delegate_to: localhost
+  run_once: true
+  ansible.builtin.import_tasks: database.yml
+  tags: [vault_config]
+
+- name: Import general configuration tasks
+  become: false
+  delegate_to: localhost
+  run_once: true
+  ansible.builtin.import_tasks: write.yml
+  tags: [vault_config]
+...
