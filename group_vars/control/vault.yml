@@ -1,5 +1,5 @@
 ---
-vault_url: https://{{ "192.168.56.11" if not yandex_cloud | default(false)
+vault_url: https://{{ k8s_lb_ip if not yandex_cloud | default(false)
   else k8s_nlb_worker_address }}:8200
 vault_config_validate_certs: false
 
