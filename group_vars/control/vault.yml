@@ -1,5 +1,6 @@
 ---
-vault_url: https://{{ k8s_lb_ip }}:8200
+vault_url: https://{{ "192.168.56.11" if not yandex_cloud | default(false)
+  else k8s_nlb_worker_address }}:8200
 vault_config_validate_certs: false
 
 vault_config_auths:
@@ -35,7 +36,7 @@ vault_config_write:
   auth/kubernetes/config:
     kubernetes_host: https://kubernetes.default.svc.cluster.local:443
   auth/kubernetes/role/wordpress:
-    audience: vault
+    audience: https://kubernetes.default.svc.cluster.local
     bound_service_account_names: [wordpress]
     bound_service_account_namespaces: [default]
     token_policies: [wordpress]
