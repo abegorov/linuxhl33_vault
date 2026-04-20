@@ -44,8 +44,9 @@
   kubernetes.core.k8s_info:
     kubeconfig: '{{ vault_kubeconfig }}'
     kind: Pod
-    name: '{{ vault_release_name }}-0'
+    name: '{{ vault_release_name }}-{{ item }}'
     namespace: '{{ vault_release_namespace }}'
+  loop: '{{ range(vault_replicas) | list }}'
   register: _vault_pod
   retries: '{{ vault_startup_retries }}'
   delay: '{{ vault_startup_delay }}'
