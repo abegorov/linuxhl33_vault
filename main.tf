@@ -157,13 +157,13 @@ resource "yandex_lb_network_load_balancer" "worker" {
   attached_target_group {
     target_group_id = yandex_lb_target_group.worker.id
     healthcheck {
-      name = "http"
+      name = "vault"
       healthy_threshold = 2
       unhealthy_threshold = 2
       interval = 2
       timeout = 1
       tcp_options {
-        port = 30080
+        port = 32200
       }
     }
   }
@@ -185,11 +185,16 @@ resource "local_file" "inventory" {
       }
     ],
     vars = {
-      k8s_nlb_address = one(
+      k8s_nlb_control_address = one(
         one(
           yandex_lb_network_load_balancer.control.listener
         ).external_address_spec
-      ).address
+      ).address,
+      k8s_nlb_worker_address = tolist(
+        tolist(
+          yandex_lb_network_load_balancer.worker.listener
+        )[0].external_address_spec
+      )[0].address
     }
   })
 }
