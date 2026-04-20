@@ -11,7 +11,42 @@
 
 ## Реализация
 
-Проект базируется на предудущем проекте [linuxhl31_kubernetes](https://github.com/abegorov/linuxhl31_kubernetes).
+Проект базируется на предудущем проекте [linuxhl31_kubernetes](https://github.com/abegorov/linuxhl31_kubernetes). Дополнительно добавлено следующее:
+
+1. Генерация сертификатов для **vault** и **vault agent** с помощью **cert-manager** (основные настройки указаны в [roles/vault/defaults/main.yml](roles/vault/defaults/main.yml) и [manifests/vault-client-tls-cert.yml](manifests/vault-client-tls-cert.yml)).
+2. Автоматическая установка кластера **vault** из 3-х узлов (используется **raft integrated storage**) с помощью [hashicorp/vault-helm](https://github.com/hashicorp/vault-helm) и **helm-git** (основные настройки указаны в [roles/vault/defaults/main.yml](roles/vault/defaults/main.yml)).
+3. Автоматическое выполнение инициализации **vault**, сохранении **unseal** токена в качестве секрета в **kubernetes** и автоматическом выполнении **unseal** в **sidecar** контейнере (основные настройки указаны в [roles/vault/defaults/main.yml](roles/vault/defaults/main.yml)).
+4. В **vault** создаётся **database engine**, подключение к базе данных **wordpress-mariadb** и статическая роль **wordpress**, которая автоматически меняет пароль каждые 2 минуты (настройки указаны в [group_vars/control/vault.yml](group_vars/control/vault.yml)).
+5. Создаётся политика **wordpress**, которая разрешает операции **read** и **subscribe** для `database/static-creds/wordpress` (настройки указаны в [group_vars/control/vault.yml](group_vars/control/vault.yml)).
+6. Включается и настраивается **kubernetes auth engine** и настраивается роль **wordpress** для аутентификации **vault agent** из **kubernetes** (настройки указаны в [group_vars/control/vault.yml](group_vars/control/vault.yml)).
+7. С помощью аннотаций в [manifests/wordpress.yml](manifests/wordpress.yml) настраивает **Vault Agent injector** для запуска **Vault Agent** в качестве **sidecar** к контейнеру **wordpress**.
+
+```yaml
+      annotations:
+        vault.hashicorp.com/agent-inject: 'true'
+        vault.hashicorp.com/agent-inject-status: update
+        vault.hashicorp.com/agent-inject-secret-db-username: >-
+          database/static-creds/wordpress
+        vault.hashicorp.com/agent-inject-template-db-username: |
+          {% raw %}
+          {{- with secret "database/static-creds/wordpress" -}}
+          {{- .Data.username -}}
+          {{- end -}}
+          {% endraw %}
+        vault.hashicorp.com/agent-inject-secret-db-password: >-
+          database/static-creds/wordpress
+        vault.hashicorp.com/agent-inject-template-db-password: |
+          {% raw %}
+          {{- with secret "database/static-creds/wordpress" -}}
+          {{- .Data.password -}}
+          {{- end -}}
+          {% endraw %}
+        vault.hashicorp.com/role: wordpress
+        vault.hashicorp.com/ca-cert: /vault/tls/ca.crt
+        vault.hashicorp.com/client-cert: /vault/tls/tls.crt
+        vault.hashicorp.com/client-key: /vault/tls/tls.key
+        vault.hashicorp.com/tls-secret: vault-client-tls
+```
 
 Задание сделано так, чтобы его можно было запустить как в **Vagrant**, так и в **Yandex Cloud**. После запуска происходит развёртывание следующих виртуальных машин отказоустойчивого кластера **kubernetes**:
 
@@ -26,6 +61,7 @@
 
 - **wait_connection** - ожидает доступность виртуальных машин (при разворачивании в **yandex cloud**).
 - **apt_sources** - настраивает репозитории для пакетного менеджера **apt** (используется [mirror.yandex.ru](https://mirror.yandex.ru)).
+- **chrony** - устанавливает **chrony** для синхронизации времени между узлами (нужно для генерации сертификатов в **cert-manager**, чтобы исключить их генерация с **NotBefore** в будующем).
 - **disable_swap** - отключает использование swap.
 - **haproxy** - устанавливает и настраивает **haproxy** на **control plane** для проксирования порта 8443 на 6443 узлы **control plane**, а также 80 и 443 порты на 30080 и 30443 порты **worker** узлов (запускается только при разворачивании в **vagrant**, в **yandex cloud** используется **network load balancer**).
 - **keepalived** - устанавливает и настраивает **keepalived** на общий адрес **192.168.56.11** для всех узлов **control plane** (запускается только при разворачивании в **vagrant**).
@@ -35,17 +71,19 @@
 - **disk_label** - разбивает диски и устанавливает на них **GPT Partition Label** для их дальнейшей идентификации на узлах **worker**.
 - **mount** - форматрует диск под данные и монтриует его в `/var/lib/longhorn` на узлах **worker**.
 - **longhorn** - устанавливает **longhorn**.
+- **vault** - устанавливает кластер **vault** и выполняет его инициализацию и **unseal**.
 - **kubernetes_apply** - применяет дополнительные манифесты в директории [manifests](manifests).
+- **vault_config** - выполняет настройку кластера **vault** (аутентификация, политики, роли, изменения паролей БД).
 
 Данные роли настраиваются с помощью переменных, определённых в следующих файлах:
 
 - [group_vars/all/ansible.yml](group_vars/all/ansible.yml) - общие переменные **ansible** для всех узлов;
 - [group_vars/all/k8s.yml](group_vars/all/k8s.yml) - адрес и порт **load balancer** для подключения к разворачиваемому кластеру **kubernetes**;
 - [group_vars/all/kubernetes.yml](group_vars/all/kubernetes.yml) - настройки кластера **kubernetes** (аргументы для **kubelet**, список узлов **control plane**, сеть и интерфейс для **flannel**);
-- [group_vars/control/etcdctl.yml](group_vars/control/etcdctl.yml) - перечень узлов кластера **etcd** для настройки утилиты **etcdctl**;
 - [group_vars/control/haproxy.yml](group_vars/control/haproxy.yml) - конфигурация **haproxy**;
 - [group_vars/control/keepalived.yml](group_vars/control/keepalived.yml) - конфигурация **keepalived**;
 - [group_vars/control/kubernetes.yml](group_vars/control/kubernetes.yml) - параметры **kubeadm** поднятия кластера **kubernetes**, список дополнительных манифестов, которые нужно применить через роль **kubernetes_apply**;
+- [group_vars/control/vault.yml](group_vars/control/vault.yml) - настройки для **vault** (аутентификация, политики, роли, изменения пароля БД).
 - [group_vars/control/wordpress.yml](group_vars/control/wordpress.yml) - настройки для **wordpress** (генерация паролей для **mariadb**, версии образов, имя домена).
 - [group_vars/worker/mount.yml](group_vars/worker/mount.yml) - настройки для ролей **disk_label** и **mount** для форматирования и монтирования `/var/lib/longhorn`.
 
@@ -56,6 +94,7 @@
 - [manifests/eg-nodeport.yml](manifests/eg-nodeport.yml) - дополнительные настройки шлюза (чтобы он работал через **NodePort** сервис, а не **LoadBalancer**);
 - [manifests/gateway.yml](manifests/gateway.yml) - шлюз;
 - [manifests/http-to-https-redirect.yml](manifests/http-to-https-redirect.yml) - настройки шлюза для перенаправления **http** на **https**;
+- [manifests/vault-client-tls-cert.yml](manifests/vault-client-tls-cert.yml) - генерация сертификата  **vault agent** для последующего подключения к **vault** из **default namespace**.
 - [manifests/wordpress-mariadb-secret.yml](manifests/wordpress-mariadb-secret.yml) - пароли для **mariadb**;
 - [manifests/wordpress-mariadb-service-headless.yml](manifests/wordpress-mariadb-service-headless.yml) - headless сервис для **mariadb**;
 - [manifests/wordpress-mariadb-service.yml](manifests/wordpress-mariadb-service.yml) - сервис для подключения к **mariadb**;
