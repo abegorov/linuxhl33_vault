@@ -149,3 +149,343 @@ rm vagrant.box
 - **helm-git v1.5.2**
 - **Jinja2 3.1.6**
 - **Terraform 1.14.8**
+
+Проверим IP адреса балансировщиков через `terraform output`, нас интересует IP адрес `vault-worker-vault` далее `81.26.179.216` или `192.168.56.11` при разворачивании через **vagrant**:
+
+```text
+❯ terraform output
+load_balancer = {
+  "vault-control-k8s" = "81.26.179.226"
+  "vault-worker-http" = "81.26.179.216"
+  "vault-worker-https" = "81.26.179.216"
+  "vault-worker-vault" = "81.26.179.216"
+}
+private_ips = {
+  "vault-control-01" = "10.130.0.21"
+  "vault-control-02" = "10.130.0.22"
+  "vault-control-03" = "10.130.0.23"
+  "vault-worker-01" = "10.130.0.31"
+  "vault-worker-02" = "10.130.0.32"
+  "vault-worker-03" = "10.130.0.33"
+}
+public_ips = {
+  "vault-control-01" = "81.26.180.85"
+  "vault-control-02" = ""
+  "vault-control-03" = ""
+  "vault-worker-01" = ""
+  "vault-worker-02" = ""
+  "vault-worker-03" = ""
+}
+```
+
+Настроим перменные среды для подключения к **vault** через **CLI** и **kubectl**:
+
+```shell
+export VAULT_ADDR="https://81.26.179.216:8200"
+export VAULT_TOKEN="$(cat secrets/vault_token.txt)"
+export VAULT_SKIP_VERIFY=1
+export KUBECONFIG=secrets/kubeconfig
+```
+
+Проверим статус кластера **vault**:
+
+```text
+❯ vault status
+Key                     Value
+---                     -----
+Seal Type               shamir
+Initialized             true
+Sealed                  false
+Total Shares            1
+Threshold               1
+Version                 2.0.0
+Build Date              2026-04-13T18:49:01Z
+Storage Type            raft
+Cluster Name            vault-integrated-storage
+Cluster ID              fd6441c2-697e-45aa-1f9d-55d9a80acf87
+Removed From Cluster    false
+HA Enabled              true
+HA Cluster              https://vault-0.vault-internal:8201
+HA Mode                 standby
+Active Node Address     https://10.244.3.13:8200
+Raft Committed Index    310
+Raft Applied Index      310
+```
+
+Проверим узлы кластера:
+
+```text
+❯ vault operator members
+Host Name    API Address                 Cluster Address                        Active Node    Version    Upgrade Version    Redundancy Zone    Last Echo
+---------    -----------                 ---------------                        -----------    -------    ---------------    ---------------    ---------
+vault-2      https://10.244.1.14:8200    https://vault-2.vault-internal:8201    false          2.0.0      2.0.0              n/a                2026-04-20T16:45:21Z
+vault-1      https://10.244.2.13:8200    https://vault-1.vault-internal:8201    false          2.0.0      2.0.0              n/a                2026-04-20T16:45:19Z
+vault-0      https://10.244.3.13:8200    https://vault-0.vault-internal:8201    true           2.0.0      2.0.0              n/a                n/a
+```
+
+Проверим состояние **raft**:
+
+```text
+❯ vault operator raft list-peers
+Node       Address                        State       Voter
+----       -------                        -----       -----
+vault-0    vault-0.vault-internal:8201    leader      true
+vault-2    vault-2.vault-internal:8201    follower    true
+vault-1    vault-1.vault-internal:8201    follower    true
+```
+
+Получим информацию о лидере:
+
+```text
+❯ vault read sys/leader
+Key                                    Value
+---                                    -----
+active_time                            0001-01-01T00:00:00Z
+ha_enabled                             true
+is_self                                false
+leader_address                         https://10.244.3.13:8200
+leader_cluster_address                 https://vault-0.vault-internal:8201
+performance_standby                    false
+performance_standby_last_remote_wal    0
+raft_applied_index                     339
+raft_committed_index                   339
+```
+
+Получим список включённых движков секретов (нас интересует `database`):
+
+```text
+❯ vault secrets list
+Path               Type              Accessor                   Description
+----               ----              --------                   -----------
+agent-registry/    agent_registry    agent-registry_b4d73fe6    agent registry
+cubbyhole/         cubbyhole         cubbyhole_498dda7f         per-token private secret storage
+database/          database          database_0646ac97          n/a
+identity/          identity          identity_8561a2dd          identity store
+sys/               system            system_ae396eb2            system endpoints used for control, policy and debugging
+```
+
+Получим конфигурацию движка `database`:
+
+```text
+❯ vault list database/config
+Keys
+----
+wordpress-mariadb
+
+❯ vault read database/config/wordpress-mariadb
+Key                                   Value
+---                                   -----
+allowed_roles                         [wordpress]
+connection_details                    map[connection_url:{{username}}:{{password}}@tcp(wordpress-mariadb.default:3306)/ username:root]
+disable_automated_rotation            false
+password_policy                       n/a
+plugin_name                           mysql-database-plugin
+plugin_version                        n/a
+root_credentials_rotate_statements    []
+rotation_period                       0s
+rotation_policy                       n/a
+rotation_schedule                     n/a
+rotation_window                       0
+skip_static_role_import_rotation      false
+verify_connection                     true
+```
+
+Получим конфигурацию роли для изменения пароль к базе данных каждые 2 минуты:
+
+```text
+33_vault on  main [!] via 💠 default via ⍱ v2.4.9
+❯ vault list database/static-roles
+Keys
+----
+wordpress
+
+❯ vault read database/static-roles/wordpress
+Key                     Value
+---                     -----
+credential_type         password
+db_name                 wordpress-mariadb
+last_vault_rotation     2026-04-20T16:56:40.538199279Z
+rotation_period         2m
+rotation_statements     [ALTER USER '{{name}}'@'%' IDENTIFIED BY '{{password}}';]
+skip_import_rotation    false
+username                wordpress
+```
+
+Получим список включённых методов аутентификации (нас интересует `kubernetes`):
+
+```text
+❯ vault auth list
+Path           Type          Accessor                    Description                Version
+----           ----          --------                    -----------                -------
+kubernetes/    kubernetes    auth_kubernetes_39a56f22    n/a                        n/a
+token/         token         auth_token_24250f0f         token based credentials    n/a
+```
+
+Получим конфигурацию метода аутентификации `kubernetes`:
+
+```text
+❯ vault read auth/kubernetes/config
+Key                                  Value
+---                                  -----
+disable_iss_validation               true
+disable_local_ca_jwt                 false
+issuer                               n/a
+kubernetes_ca_cert                   n/a
+kubernetes_host                      https://kubernetes.default.svc.cluster.local:443
+pem_keys                             []
+token_reviewer_jwt_set               false
+use_annotations_as_alias_metadata    false
+```
+
+Получим конфигурацию ролей метода аутентификации `kubernetes`:
+
+```text
+❯ vault list auth/kubernetes/role
+Keys
+----
+wordpress
+
+❯ vault read auth/kubernetes/role/wordpress
+Key                                         Value
+---                                         -----
+alias_metadata                              map[]
+alias_name_source                           serviceaccount_uid
+audience                                    https://kubernetes.default.svc.cluster.local
+bound_service_account_names                 [wordpress]
+bound_service_account_namespace_selector    n/a
+bound_service_account_namespaces            [default]
+token_bound_cidrs                           []
+token_explicit_max_ttl                      0s
+token_max_ttl                               0s
+token_no_default_policy                     false
+token_num_uses                              0
+token_period                                0s
+token_policies                              [wordpress]
+token_ttl                                   0s
+token_type                                  default
+```
+
+Посмотрим сконфигурированную политику:
+
+```text
+❯ vault list sys/policy
+Keys
+----
+default
+root
+wordpres
+
+❯ vault read sys/policy/wordpress
+Key      Value
+---      -----
+name     wordpress
+rules    path "database/static-creds/wordpress" {
+  capabilities = ["read", "subscribe"]
+}
+```
+
+Проверим, что пароль меняется каждые 2 минуты:
+
+```text
+❯ vault read database/static-creds/wordpress
+Key                    Value
+---                    -----
+last_vault_rotation    2026-04-20T17:18:40.546729344Z
+password               KU-W1WHXZtqAng5Ldq8N
+rotation_period        2m
+ttl                    1m34s
+username               wordpress
+
+❯ sleep 120
+
+❯ vault read database/static-creds/wordpress
+Key                    Value
+---                    -----
+last_vault_rotation    2026-04-20T17:20:40.538735303Z
+password               nBi7P7NojX01l-WoDLJs
+rotation_period        2m
+ttl                    1m34s
+username               wordpress
+```
+
+Проверим подключение к базе данных с паролем из **vault**:
+
+```text
+❯ kubectl exec -it wordpress-mariadb-0 -- mariadb-admin -u wordpress --password="$(vault read -field=password database/static-creds/wordpress)" status
+Uptime: 5936  Threads: 5  Questions: 142245  Slow queries: 0  Opens: 31  Open tables: 24  Queries per second avg: 23.963
+```
+
+Проверим работу **wordpress** через **curl**:
+
+```text
+❯ curl -kv --silent https://81.26.179.216 > /dev/null
+*   Trying 81.26.179.216:443...
+* ALPN: curl offers h2,http/1.1
+} [5 bytes data]
+* TLSv1.3 (OUT), TLS handshake, Client hello (1):
+} [1550 bytes data]
+* SSL Trust: peer verification disabled
+{ [5 bytes data]
+* TLSv1.3 (IN), TLS handshake, Server hello (2):
+{ [122 bytes data]
+* TLSv1.3 (IN), TLS change cipher, Change cipher spec (1):
+{ [1 bytes data]
+* TLSv1.3 (IN), TLS handshake, Encrypted Extensions (8):
+{ [15 bytes data]
+* TLSv1.3 (IN), TLS handshake, Certificate (11):
+{ [738 bytes data]
+* TLSv1.3 (IN), TLS handshake, CERT verify (15):
+{ [264 bytes data]
+* TLSv1.3 (IN), TLS handshake, Finished (20):
+{ [52 bytes data]
+* TLSv1.3 (OUT), TLS change cipher, Change cipher spec (1):
+} [1 bytes data]
+* TLSv1.3 (OUT), TLS handshake, Finished (20):
+} [52 bytes data]
+* SSL connection using TLSv1.3 / TLS_AES_256_GCM_SHA384 / x25519 / RSASSA-PSS
+* ALPN: server accepted h2
+* Server certificate:
+*   subject:
+*   start date: Apr 20 15:36:31 2026 GMT
+*   expire date: Jul 19 15:36:31 2026 GMT
+*   issuer:
+*   Certificate level 0: Public key type RSA (2048/112 Bits/secBits), signed using sha256WithRSAEncryption
+* OpenSSL verify result: 12
+*  SSL certificate verification failed, continuing anyway!
+* Established connection to 81.26.179.216 (81.26.179.216 port 443) from 192.168.237.192 port 39812
+* using HTTP/2
+* [HTTP/2] [1] OPENED stream for https://81.26.179.216/
+* [HTTP/2] [1] [:method: GET]
+* [HTTP/2] [1] [:scheme: https]
+* [HTTP/2] [1] [:authority: 81.26.179.216]
+* [HTTP/2] [1] [:path: /]
+* [HTTP/2] [1] [user-agent: curl/8.19.0]
+* [HTTP/2] [1] [accept: */*]
+} [5 bytes data]
+> GET / HTTP/2
+> Host: 81.26.179.216
+> User-Agent: curl/8.19.0
+> Accept: */*
+>
+* Request completely sent off
+} [5 bytes data]
+< HTTP/2 200
+< server: Angie/1.11.4
+< date: Mon, 20 Apr 2026 17:23:15 GMT
+< content-type: text/html; charset=UTF-8
+< x-powered-by: PHP/8.5.5
+< link: <https://81.26.179.216/index.php?rest_route=/>; rel="https://api.w.org/"
+<
+{ [13608 bytes data]
+* Connection #0 to host 81.26.179.216:443 left intact
+```
+
+Зайдём в **vault** через **web** интерфейс (он доступен по 8200 порту):
+
+![Raft storage](images/raft.png)
+
+![Secrets engines/database/wordpress](images/rotation.png)
+
+Проверим, что **wordpress** работает:
+
+![wordpress](images/wordpress.png)
